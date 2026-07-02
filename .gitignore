@@ -1,0 +1,24 @@
+.obsidian/
+Assets/
+/Data/KOI_Cumulative_clean.csv
+CSV Columns.md
+Challenge Overview.md
+Dataset File Summary.md
+Dataset Guide.md
+Home.md
+Mission and Workflow.md
+PRD.md
+Plan.md
+Prizes and Judging.md
+Requirements and Deliverables.md
+Resources.md
+Rules and Code of Conduct.md
+Schedule.md
+Sources.md
+Updates.md
+
+# project
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+data/processed/

@@ -1,0 +1,10 @@
+pandas>=2.2,<4
+numpy>=1.26,<3
+scikit-learn>=1.5,<2
+xgboost>=2.0,<4
+shap>=0.46
+matplotlib>=3.8,<4
+seaborn>=0.13,<1
+imbalanced-learn>=0.12,<1
+jupyter>=1.0
+nbformat>=5.9
