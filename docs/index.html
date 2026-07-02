@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorting Real Planets From Noise — Kepler KOI Classification</title>
+<meta name="description" content="A three-class XGBoost classifier separating confirmed exoplanets from candidates and false positives in NASA's Kepler catalog, with SHAP explanations.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+window.MathJax = { tex: { inlineMath: [['\\(','\\)']] }, options: { skipHtmlTags: ['script','noscript','style','textarea','pre'] } };
+</script>
+<script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+<style>
+  :root {
+    --ink: #2b241c;
+    --ink-soft: #5f5548;
+    --ink-faint: #9a8d7c;
+    --paper: #f7f1e6;
+    --card: #fffcf5;
+    --line: #e5dac7;
+    --accent: #a45124;
+    --accent-soft: #f3e4d6;
+    --good: #4a6741;
+    --radius: 14px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.65;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2 { font-family: 'Fraunces', Georgia, serif; letter-spacing: -0.01em; }
+  h3 { font-family: 'Inter', sans-serif; letter-spacing: -0.01em; }
+  code, .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.88em; }
+  code { background: var(--accent-soft); color: var(--accent); padding: 0.1em 0.4em; border-radius: 5px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- hero ---------- */
+  header {
+    padding: 88px 0 64px;
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 600px 300px at 85% 10%, #f0e2cd 0%, transparent 70%),
+      var(--paper);
+  }
+  .kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 20px;
+  }
+  .kicker svg { width: 16px; height: 16px; }
+  h1 { font-size: clamp(30px, 5vw, 46px); font-weight: 700; line-height: 1.12; max-width: 720px; }
+  .lede { margin-top: 20px; font-size: 18px; color: var(--ink-soft); max-width: 640px; }
+  .hero-links { margin-top: 28px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(64,50,33,0.12); border-color: var(--ink-faint); text-decoration: none; }
+  .btn.primary { background: var(--ink); color: #fdf9f0; border-color: var(--ink); }
+  .btn.primary:hover { box-shadow: 0 6px 18px rgba(64,50,33,0.3); }
+  .btn svg { width: 15px; height: 15px; }
+
+  /* ---------- stat tiles ---------- */
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px; margin-top: 48px;
+  }
+  .stat {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 20px 18px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .stat:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(64,50,33,0.1); }
+  .stat .num { font-family: 'Fraunces', Georgia, serif; font-size: 30px; font-weight: 600; line-height: 1.1; }
+  .stat .lbl { font-size: 12.5px; color: var(--ink-faint); margin-top: 5px; font-weight: 500; }
+  .stat.hero-stat .num { color: var(--accent); }
+
+  /* ---------- sections ---------- */
+  section { padding: 64px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: none; }
+  .sec-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .sec-head svg { width: 22px; height: 22px; color: var(--accent); flex-shrink: 0; }
+  h2 { font-size: 26px; font-weight: 600; }
+  .sec-sub { color: var(--ink-soft); max-width: 660px; margin-bottom: 32px; }
+
+  /* ---------- pipeline ---------- */
+  .pipeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .step {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 16px; position: relative;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .step:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(64,50,33,0.1); border-color: var(--accent); }
+  .step .n {
+    font-family: 'JetBrains Mono'; font-size: 11px; font-weight: 500;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 2px 8px; border-radius: 20px; display: inline-block; margin-bottom: 10px;
+  }
+  .step h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .step p { font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+
+  /* ---------- tables ---------- */
+  .tbl-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th {
+    text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink-faint); font-weight: 600; padding: 14px 18px;
+    border-bottom: 1px solid var(--line); background: #faf5ea;
+  }
+  td { padding: 13px 18px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr { transition: background 0.15s ease; }
+  tbody tr:hover { background: var(--accent-soft); }
+  td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+  .win { font-weight: 600; color: var(--accent); }
+  .why { color: var(--ink-soft); font-size: 13.5px; }
+
+  /* ---------- prose + cards ---------- */
+  .prose { max-width: 700px; }
+  .prose p { margin-bottom: 16px; color: var(--ink-soft); }
+  .prose strong { color: var(--ink); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 24px;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(64,50,33,0.1); }
+  .card h3 { font-size: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 9px; }
+  .card h3 svg { width: 17px; height: 17px; color: var(--accent); flex-shrink: 0; }
+  .card p, .card li { font-size: 14px; color: var(--ink-soft); }
+  .card ul { padding-left: 18px; margin-top: 6px; }
+  .card li { margin-bottom: 6px; }
+
+  /* ---------- figures ---------- */
+  .figs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .figs { grid-template-columns: 1fr; } }
+  figure {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    overflow: hidden;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+  }
+  figure:hover { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(64,50,33,0.12); }
+  figure.wide { grid-column: 1 / -1; }
+  figure .imgbox { overflow: hidden; background: #fff; }
+  figure img { width: 100%; display: block; transition: transform 0.35s ease; }
+  figure:hover img { transform: scale(1.02); }
+  figcaption { padding: 14px 18px; font-size: 13.5px; color: var(--ink-soft); border-top: 1px solid var(--line); }
+  figcaption strong { color: var(--ink); }
+
+  /* ---------- footer ---------- */
+  footer { padding: 48px 0 64px; color: var(--ink-faint); font-size: 14px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* ---------- scroll reveal ---------- */
+  .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.6s ease, transform 0.6s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .stat:hover, .step:hover, .card:hover, figure:hover, .btn:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/></svg>
+      Celesta Exoplanet Challenge · NASA Kepler Data
+    </div>
+    <h1>Sorting real planets from noise in Kepler's catalog</h1>
+    <p class="lede">A three-class classifier over all 9,564 Kepler Objects of Interest: confirmed planet, candidate, or false positive. Built on vetting physics, audited for label leakage, and explained prediction-by-prediction with SHAP.</p>
+    <div class="hero-links">
+      <a class="btn primary" href="https://github.com/prantikmedhi/nasa-koi-classification">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.6.5.5 5.6.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.4-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.2 1.2a11 11 0 0 1 5.8 0C17.3 4.7 18.3 5 18.3 5c.6 1.6.2 2.8.1 3.1.7.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6a11.5 11.5 0 0 0 7.9-10.9C23.5 5.6 18.4.5 12 .5z"/></svg>
+        View source on GitHub
+      </a>
+      <a class="btn" href="#results">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg>
+        Jump to results
+      </a>
+    </div>
+
+    <div class="stats">
+      <div class="stat hero-stat"><div class="num">94.2%</div><div class="lbl">Test accuracy</div></div>
+      <div class="stat hero-stat"><div class="num">0.922</div><div class="lbl">Macro F1</div></div>
+      <div class="stat"><div class="num">0.992</div><div class="lbl">F1 · False positive</div></div>
+      <div class="stat"><div class="num">0.913</div><div class="lbl">F1 · Confirmed</div></div>
+      <div class="stat"><div class="num">0.863</div><div class="lbl">F1 · Candidate</div></div>
+    </div>
+  </div>
+</header>
+
+<section class="reveal">
+  <div class="wrap">
+    <div class="sec-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg>
+      <h2>The pipeline in five steps</h2>
+    </div>
+    <p class="sec-sub">Two notebooks backed by four documented modules in <code>src/</code>. Fixed seeds, pinned dependencies, runs top to bottom.</p>
+    <div class="pipeline">
+      <div class="step"><span class="n">01</span><h3>Audit</h3><p>Profile the raw 9,564 × 140 table: 19 all-null columns dropped, skew and missingness mapped.</p></div>
+      <div class="step"><span class="n">02</span><h3>Leakage hunt</h3><p><code>koi_pdisposition</code>, <code>kepler_name</code>, vetting comments, status metadata and report links all excluded.</p></div>
+      <div class="step"><span class="n">03</span><h3>Features</h3><p>Eight physics-derived features; mirrored <code>_err2</code> uncertainty twins pruned; medians fit on train split only.</p></div>
+      <div class="step"><span class="n">04</span><h3>Models</h3><p>Logistic regression → random forest → XGBoost under stratified 5-fold CV, balanced class weights.</p></div>
+      <div class="step"><span class="n">05</span><h3>Explain</h3><p>SHAP ranks every prediction's drivers in the same terms astronomers use to vet by hand.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="reveal">
+  <div class="wrap">
+    <div class="sec-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.7 3h12.6a2 2 0 0 0 1.7-3l-5-8V3"/><path d="M7 3h10"/></svg>
+      <h2>Eight features, each a piece of vetting physics</h2>
+    </div>
+    <p class="sec-sub">The dataset deliberately omits <code>koi_score</code>, the pipeline's own confidence output. That forced real feature engineering instead of letting one precomputed column do the job.</p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Feature</th><th>Formula</th><th>What it catches</th></tr></thead>
+        <tbody>
+          <tr><td>Depth per hour</td><td class="mono">\( \mathrm{depth}/\mathrm{duration} \)</td><td class="why">Stellar eclipses are deep and sharp; planetary transits shallow and gradual</td></tr>
+          <tr><td>Radius ratio</td><td class="mono">\( R_p / (109.2\,R_\star) \)</td><td class="why">Ratio near 1 means the "planet" is a star \( (1\,R_\odot \approx 109.2\,R_\oplus) \)</td></tr>
+          <tr><td>Event statistic ratio</td><td class="mono">\( \mathrm{MES}/\mathrm{SES}_{\max} \)</td><td class="why">Real transits accumulate evidence across orbits; one-off glitches don't</td></tr>
+          <tr><td>Duration check</td><td class="mono">observed vs. \( P^{1/3} \)</td><td class="why">Kepler's third law scaling; large deviations flag grazing eclipses or blends</td></tr>
+          <tr><td>Log transforms</td><td class="mono">\( \log_{10} \) period, depth, insolation</td><td class="why">These quantities span several orders of magnitude</td></tr>
+          <tr><td>SNR per transit</td><td class="mono">\( \mathrm{SNR}/N_{\mathrm{transits}} \)</td><td class="why">Strong-because-deep vs. strong-because-seen-many-times</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="results" class="reveal">
+  <div class="wrap">
+    <div class="sec-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/></svg>
+      <h2>Results</h2>
+    </div>
+    <p class="sec-sub">Stratified 5-fold cross-validation on an 80/20 stratified split, seed 42. Macro F1 is the primary metric: classes are imbalanced (51% false positive, 29% confirmed, 21% candidate) and accuracy alone would flatter a model that mostly calls things "false positive."</p>
+    <div class="two-col">
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Model</th><th class="r">Accuracy</th><th class="r">Macro F1</th></tr></thead>
+          <tbody>
+            <tr><td>Logistic regression</td><td class="r">0.916</td><td class="r">0.888</td></tr>
+            <tr><td>Random forest</td><td class="r">0.928</td><td class="r">0.903</td></tr>
+            <tr><td class="win">XGBoost</td><td class="r win">0.942</td><td class="r win">0.922</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr><th>Honesty ablation</th><th class="r">Macro F1</th></tr></thead>
+          <tbody>
+            <tr><td>With NASA vetting flags <span class="why">(primary)</span></td><td class="r win">0.922</td></tr>
+            <tr><td>Flags removed <span class="why">(raw signal only)</span></td><td class="r">0.830</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="prose" style="margin-top:24px">
+      <p>The four <code>koi_fpflag_*</code> columns are legitimate features, available at prediction time and not leaked from the label, but they do a lot of false-positive detection for free. Both numbers are reported so the result stands under either framing: lean on the pipeline flags and get 0.922, or exclude everything the vetting pipeline produced and still get 0.830. A 20-configuration randomized hyperparameter search moved CV macro F1 from 0.930 to 0.928 and did not improve the test score, so the near-default configuration is reported rather than a cherry-picked run.</p>
+    </div>
+  </div>
+</section>
+
+<section class="reveal">
+  <div class="wrap">
+    <div class="sec-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <h2>What the model looks at</h2>
+    </div>
+    <p class="sec-sub">SHAP ranks the vetting flags first, then genuinely physical features. That ordering tracks how astronomers vet by hand: check the geometry, check the repeatability, check the signal quality.</p>
+    <div class="figs">
+      <figure class="wide"><div class="imgbox"><img src="figures/confusion_matrix.png" alt="Confusion matrix for the XGBoost model" loading="lazy"></div><figcaption><strong>Confusion matrix.</strong> Almost all residual error sits on the CONFIRMED–CANDIDATE boundary, the correct place to be uncertain: a candidate is by definition a planet-like signal that hasn't cleared the confirmation bar yet.</figcaption></figure>
+      <figure><div class="imgbox"><img src="figures/shap_summary.png" alt="SHAP feature importance summary" loading="lazy"></div><figcaption><strong>SHAP summary.</strong> After the flags: multiple-event statistic, centroid offset <code>koi_dicco_msky</code>, transit SNR, planet radius \( (\gtrsim 2\,R_{\mathrm{Jup}} \) is almost always a small star).</figcaption></figure>
+      <figure><div class="imgbox"><img src="figures/roc_curves.png" alt="Per-class ROC curves" loading="lazy"></div><figcaption><strong>ROC curves.</strong> Per-class separation; false positives are nearly perfectly identified (F1 0.992).</figcaption></figure>
+      <figure><div class="imgbox"><img src="figures/class_balance.png" alt="Class balance of the KOI dataset" loading="lazy"></div><figcaption><strong>Class balance.</strong> 51 / 29 / 21 split — the reason macro F1 and balanced class weights, not plain accuracy or SMOTE.</figcaption></figure>
+      <figure><div class="imgbox"><img src="figures/missingness.png" alt="Column missingness profile" loading="lazy"></div><figcaption><strong>Missingness audit.</strong> 19 all-null columns dropped; remaining gaps (≤16% per column) median-imputed with medians fit on the training split only.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="reveal">
+  <div class="wrap">
+    <div class="sec-head">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 5.3 5.6.6-4.2 3.9 1.2 5.5L12 14.5 7 17.3l1.2-5.5L4 7.9l5.6-.6z"/></svg>
+      <h2>Decisions that mattered</h2>
+    </div>
+    <div class="two-col" style="margin-top:28px">
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="9"/></svg>Weighting over SMOTE</h3>
+        <p>SMOTE-style interpolation on heavy-tailed physical quantities like orbital period can fabricate physically impossible objects. Balanced class weighting keeps every real observation.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Leakage before model choice</h3>
+        <p>Even <code>kepler_name</code>'s <em>missingness</em> encodes the label, since names are only assigned to confirmed planets. Going logistic → XGBoost moved macro F1 by 0.034; sloppy leakage handling could have inflated any number past meaning.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>Report the honest number</h3>
+        <p>The flags ablation (0.922 → 0.830) quantifies exactly how much the model learns from physics versus reading pre-computed hints. Both are published.</p>
+      </div>
+      <div class="card">
+        <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>What's next</h3>
+        <ul>
+          <li>Test on TESS candidates — does it generalize past Kepler's instrument?</li>
+          <li>Web demo: per-KOI predictions with SHAP explanations</li>
+          <li>Per-feature ablation over the 8 engineered features</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Celesta Exoplanet Challenge · NASA Exoplanet Archive KOI cumulative table</span>
+    <span><a href="https://github.com/prantikmedhi/nasa-koi-classification">github.com/prantikmedhi/nasa-koi-classification</a></span>
+  </div>
+</footer>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+
+</body>
+</html>
