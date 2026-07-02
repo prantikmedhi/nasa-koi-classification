@@ -40,6 +40,14 @@ One ablation deserves its own paragraph. The four `koi_fpflag_*` columns are out
 
 SHAP analysis ranks the vetting flags first. The stellar-eclipse, not-transit-like, and centroid-offset flags are near-decisive evidence against a planet. After the flags come genuinely physical features: the multiple-event statistic (is the signal periodic and cumulative?), the centroid offset `koi_dicco_msky` (is the dimming actually happening on the target star, or on a neighbor blended into the same pixel?), transit signal-to-noise (confirmation requires a clean signal, and low SNR is a big part of why candidates stay candidates), and planet radius (objects larger than about 2 Jupiter radii are almost always small stars). This decision logic mirrors how astronomers vet KOIs by hand: check the geometry, check the repeatability, check the signal quality. That is decent evidence the model learned physics rather than dataset quirks.
 
+## Explaining the predictions to a non-technical audience
+
+Imagine Kepler as a security camera pointed at a hundred thousand stars, watching for a light in the house to flicker. Most flickers turn out to be nothing: a passing car, a bug on the lens. A real burglar walks past the same window on every lap, dims the light by the same small amount each time, for the same number of seconds. That regular, faint, repeating dimming is what a real planet looks like, and it is what the model is trained to recognize.
+
+The model checks a short list of things an astronomer would check by hand. Does the dimming happen on the actual star, or on a neighboring star caught in the same pixel? Does it repeat on schedule, or did it happen once and never again? Is the dip shallow and gradual, like a small planet sliding in front of a much bigger star, or deep and sudden, like two stars of similar size eclipsing each other? Kepler's own automated pipeline already flags obvious problems, such as a signal that clearly isn't shaped like a transit or one where the dimming is centered on the wrong star, and the model leans on those flags heavily, the same way a human reviewer would start there before digging further.
+
+Where the model struggles is the same place a human would struggle: telling a confirmed planet from a candidate. A candidate is not a different kind of object, it is a planet-shaped signal that has not yet accumulated enough evidence to be certain. So when the model mixes up these two categories, it isn't making an error so much as reporting genuine uncertainty, in the same way a doctor might say "probably benign, pending more tests" rather than giving a false yes or no.
+
 ## Reproducibility
 
 Everything runs top-to-bottom from two notebooks (`01_eda.ipynb`, `02_modeling.ipynb`) backed by four documented modules in `src/`, with fixed random seeds and pinned dependency ranges in `requirements.txt`.
