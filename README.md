@@ -80,7 +80,7 @@ Or open them interactively with `jupyter lab`. The modeling notebook takes about
 - **Macro F1 is the primary metric.** The classes are imbalanced (51/29/21%), so accuracy would flatter majority-class predictions.
 - **Leakage is controlled explicitly.** `koi_score` is absent by design and not reconstructed. `koi_pdisposition` and `kepler_name` are excluded because their missingness encodes the label. Imputation medians are fit on the training split only.
 - **Class weighting instead of resampling.** Weighting keeps every real observation and avoids synthesizing physically impossible objects in a heavy-tailed feature space.
-- **Kepler's `koi_fpflag_*` columns are kept** as legitimate features. An ablation quantifies their contribution: macro F1 is 0.922 with them and 0.830 without.
+- **Kepler's `koi_fpflag_*` columns are explicitly excluded** as data leakage — they are the output of NASA's vetting pipeline and encode the target classification.
 
 Full rationale and a plain-language interpretation of the model are in [reports/writeup.md](reports/writeup.md).
 

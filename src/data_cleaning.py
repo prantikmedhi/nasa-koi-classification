@@ -42,19 +42,21 @@ ID_LEAKAGE_COLS = [
     "koi_datalink_dvr", "koi_datalink_dvs",
 ]
 
+# Kepler pipeline false-positive vetting flags. These are the OUTPUT of NASA's
+# automated vetting pipeline — they encode the very thing we are trying to
+# predict and using them as features is data leakage. Removing them is the
+# honest approach; the model must learn to classify planets from the transit
+# physics and stellar parameters alone.
+FPFLAG_COLS = ["koi_fpflag_nt", "koi_fpflag_ss", "koi_fpflag_co", "koi_fpflag_ec"]
+
 # Non-informative object columns: koi_quarters is a per-quarter observation
 # bitstring (not a tabular feature), koi_limbdark_mod and koi_trans_mod are
-# (near-)constant model-name strings.
-NON_INFORMATIVE_COLS = ["koi_quarters", "koi_limbdark_mod", "koi_trans_mod"]
+# (near-)constant model-name strings. FPFLAG_COLS are data-leakage columns
+# (NASA's pre-evaluated false-positive vetting pipeline output).
+NON_INFORMATIVE_COLS = ["koi_quarters", "koi_limbdark_mod", "koi_trans_mod"] + FPFLAG_COLS
 
 # Low-cardinality categorical columns kept and one-hot encoded.
 CATEGORICAL_COLS = ["koi_fittype", "koi_parm_prov", "koi_sparprov", "koi_tce_delivname"]
-
-# Kepler pipeline false-positive vetting flags. Kept as features by default
-# (they are legitimate outputs of the automated vetting pipeline, available at
-# prediction time), but exposed separately so an ablation without them can be
-# run — they encode much of the FALSE POSITIVE signal.
-FPFLAG_COLS = ["koi_fpflag_nt", "koi_fpflag_ss", "koi_fpflag_co", "koi_fpflag_ec"]
 
 
 def load_raw(path: str | Path) -> pd.DataFrame:

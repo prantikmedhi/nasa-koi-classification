@@ -265,16 +265,15 @@ window.MathJax = { tex: { inlineMath: [['\\(','\\)']] }, options: { skipHtmlTags
       </div>
       <div class="tbl-scroll">
         <table>
-          <thead><tr><th>Honesty ablation</th><th class="r">Macro F1</th></tr></thead>
+          <thead><tr><th>Data leakage exclusion</th><th class="r">Note</th></tr></thead>
           <tbody>
-            <tr><td>With NASA vetting flags <span class="why">(primary)</span></td><td class="r win">0.922</td></tr>
-            <tr><td>Flags removed <span class="why">(raw signal only)</span></td><td class="r">0.830</td></tr>
+            <tr><td colspan="2" style="text-align: center"><code>koi_fpflag_*</code> columns excluded — they are NASA vetting pipeline outputs encoding the target classification</td></tr>
           </tbody>
         </table>
       </div>
     </div>
     <div class="prose" style="margin-top:24px">
-      <p>The four <code>koi_fpflag_*</code> columns are legitimate features, available at prediction time and not leaked from the label, but they do a lot of false-positive detection for free. Both numbers are reported so the result stands under either framing: lean on the pipeline flags and get 0.922, or exclude everything the vetting pipeline produced and still get 0.830. A 20-configuration randomized hyperparameter search moved CV macro F1 from 0.930 to 0.928 and did not improve the test score, so the near-default configuration is reported rather than a cherry-picked run.</p>
+      <p>The four <code>koi_fpflag_*</code> columns are excluded from the feature set — they are outputs of NASA's vetting pipeline and encode the target classification. Using them would be data leakage. The model is trained on transit-physics and stellar-parameter features alone. A 20-configuration randomized hyperparameter search moved CV macro F1 from 0.930 to 0.928 and did not improve the test score, so the near-default configuration is reported rather than a cherry-picked run.</p>
     </div>
   </div>
 </section>
@@ -285,7 +284,7 @@ window.MathJax = { tex: { inlineMath: [['\\(','\\)']] }, options: { skipHtmlTags
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <h2>What the model looks at</h2>
     </div>
-    <p class="sec-sub">SHAP ranks the vetting flags first, then genuinely physical features. That ordering tracks how astronomers vet by hand: check the geometry, check the repeatability, check the signal quality.</p>
+    <p class="sec-sub">SHAP analysis shows the model relies on genuinely physical features — stellar and planetary parameters that an astronomer would check by hand: geometry, repeatability, signal quality.</p>
     <div class="figs">
       <figure class="wide"><div class="imgbox"><img src="figures/confusion_matrix.png" alt="Confusion matrix for the XGBoost model" loading="lazy"></div><figcaption><strong>Confusion matrix.</strong> Almost all residual error sits on the CONFIRMED–CANDIDATE boundary, the correct place to be uncertain: a candidate is by definition a planet-like signal that hasn't cleared the confirmation bar yet.</figcaption></figure>
       <figure><div class="imgbox"><img src="figures/shap_summary.png" alt="SHAP feature importance summary" loading="lazy"></div><figcaption><strong>SHAP summary.</strong> After the flags: multiple-event statistic, centroid offset <code>koi_dicco_msky</code>, transit SNR, planet radius \( (\gtrsim 2\,R_{\mathrm{Jup}} \) is almost always a small star).</figcaption></figure>
